@@ -185,6 +185,208 @@ git config --system http.sslcainfo "E:/Git/mingw64/ssl/certs/ca-bundle.crt"
 #####angular自定义样式
 
 ```
+:host ::ng-deep {
+  .ant-tabs-large > .ant-tabs-nav .ant-tabs-tab {
+    padding: 16px 40px;
+    font-size: 16px;
+  }
+}
+#####angularTab组件切换应用
+```
+<page-header></page-header>
+<nz-card [nzBordered]="true">
+  <nz-card-tab>
+    <nz-tabset nzSize="large" (nzSelectChange)="change($event)">
+      <nz-tab nzTitle="工單類型維護" style="margin-right: 100px"></nz-tab>
+      <nz-tab nzTitle="工單負責人維護" width="200px"></nz-tab>
+      <nz-tab nzTitle="料號段別對照信息維護" width="200px"></nz-tab>
+      <nz-tab nzTitle="工作日及假日維護" width="200px"></nz-tab>
+    </nz-tabset>
+  </nz-card-tab>
+  <div [se-container]="1" style="margin-bottom: 3%">
+    <div nz-row nzGutter="24">
+      <nz-col nzXs="24" nzSm="12" nzMd="8" nzLg="8">
+        <se>
+          <button nz-button (click)="uploadExcel.click()" nzType="primary" style="background-color: rgba(112, 98, 172, 0.938); border: 0">
+            excel文件上傳
+          </button>
+          <input #uploadExcel type="file" id="uploadExcel" hidden="hidden" (change)="readExcel($event)" />
+        </se>
+      </nz-col>
+      <nz-col nzXs="24" nzSm="12" nzMd="8" nzLg="8">
+        <se>
+          <button
+            id="download"
+            (click)="download()"
+            nz-button
+            nzType="primary"
+            style="background-color: rgba(245, 171, 12, 0.938); border: 0"
+          >
+            下载模板
+          </button>
+        </se>
+      </nz-col>
+    </div>
+  </div>
+  <!-- 工單類型維護 -->
+  <div id="workorderType" style="display: block">
+    <st #st [columns]="typeColumns" [data]="datas"></st>
+  </div>
+  <!-- 工單負責人維護 -->
+  <div id="workorderPrincipal" style="display: none">
+    <st #st [columns]="PrincipalColumns" [data]="datas"></st>
+  </div>
+  <!-- 料號段別對照信息維護 -->
+  <div id="partNumber" style="display: none">
+    <st #st [columns]="partNumberColumns" [data]="datas"></st>
+  </div>
+  <!-- 工作日及假日維護 -->
+  <div id="workdayAndholiday" style="display: none">
+    <st #st [columns]="workdayColumns" [data]="datas"></st>
+  </div>
+</nz-card>
+```
+import { HttpParams } from '@angular/common/http';
+import { Component, OnInit, ViewChild } from '@angular/core';
+import { STColumn, STComponent } from '@delon/abc/st';
+import { _HttpClient } from '@delon/theme';
+import { NzMessageService } from 'ng-zorro-antd/message';
+import { NzTabChangeEvent } from 'ng-zorro-antd/tabs';
+import { webApiUrls } from 'src/services/webApiUrls';
+import * as XLSX from 'xlsx';
+@Component({
+  selector: 'app-mo',
+  templateUrl: './mo.component.html',
+  styleUrls: ['./mo.component.less'],
+})
+export class MoComponent implements OnInit {
+  @ViewChild('st', { static: false })
+  st: STComponent | undefined;
+  index: any;
+  datas: any = [];
+  queryurl: any;
+  inserturl: any;
+  q: any;
+  downloadurl: any;
+  uploadData: any = [];
+  typeColumns: STColumn[] = [
+    { title: 'xxx', index: 'xxx' },
+  ];
+  mylist: any = [];
+  constructor(private http: _HttpClient, private msg: NzMessageService) {}
+
+  ngOnInit() {
+    this.index = 0;
+    this.queryurl = webApiUrls.mo.moTypeQuery;
+    this.inserturl = webApiUrls.mo.moTypeInsert;
+    this.query(this.queryurl);
+  }
+  change(args: NzTabChangeEvent) {
+    this.index = args.index;
+    console.log(args.index, '******');
+    this.changTab(this.index);
+  }
+  // 内容显示隐藏
+  isShow(id: string, isnone: any) {
+    const item = document.getElementById(id);
+    if (item) {
+      item.style.display = isnone;
+    }
+  }
+  readExcel(evt: Event) {
+    const target: DataTransfer = <DataTransfer>(<unknown>evt.target);
+    if (target.files.length !== 1) throw new Error('Cannot use multiple files');
+    const reader: FileReader = new FileReader();
+    reader.onload = (e: any) => {
+      /* read workbook */
+      const bstr: string = e.target.result;
+      const wb: XLSX.WorkBook = XLSX.read(bstr, { type: 'binary' });
+
+      /* grab first sheet */
+      const wsname: string = wb.SheetNames[0];
+      const ws: XLSX.WorkSheet = wb.Sheets[wsname];
+
+      /* save data */
+      this.uploadData = XLSX.utils.sheet_to_json(ws, { header: 1 });
+      var data = this.tojson(this.uploadData);
+      console.log(data);
+      var obj;
+      if (data != null) {
+        obj = eval(data);
+      }
+      if (this.uploadData != null) {
+        // const params = new HttpParams().set('objs',this.uploadData);
+        // console.log(params);
+        this.http.post(this.inserturl, obj).subscribe((res) => {
+          if (res.status == 200) {
+            this.msg.success('上傳成功！');
+            this.query(this.queryurl);
+          } else if (res == 100) {
+            this.msg.warning('文件中存在空數據，請及時修改！');
+            this.query(this.queryurl);
+          } else this.msg.error('上傳失敗！');
+        });
+      }
+      if (evt != null) {
+        if (evt.target != null) {
+          (<HTMLInputElement>evt.target).value = ''; //清空
+        }
+      }
+    };
+    reader.readAsBinaryString(target.files[0]);
+  }
+
+  tojson(arr: any[]) {
+    if (!arr.length) return null;
+    var i = 0;
+    var len = arr.length;
+    var array = [];
+    for (i = 1; i < len; i++) {
+      if (this.index == 0) {
+        array.push({
+          plant: arr[i][0],
+          motype: arr[i][1],
+          seg: arr[i][2],
+          modesc: arr[i][3],
+          kpi: arr[i][4],
+          createdate: arr[i][5],
+        });
+      }
+    }
+    return JSON.stringify(array);
+  }
+  query(url: any) {
+    this.http.get(this.queryurl).subscribe((res) => {
+      console.log(res.data);
+      this.datas = res.data;
+    });
+  }
+
+  //切换菜单
+  changTab(index: any) {
+    if (index === 0) {
+      this.queryurl = webApiUrls.mo.moTypeQuery;
+      this.inserturl = webApiUrls.mo.moTypeInsert;
+      this.isShow('workorderType', 'block');
+      this.isShow('workorderPrincipal', 'none');
+      this.isShow('partNumber', 'none');
+      this.isShow('workdayAndholiday', 'none');
+      this.query(this.queryurl);
+    }
+   
+  }
+  download() {
+    console.log('================');
+    const a = document.createElement('a');
+    if (this.index == 0) {
+      this.downloadurl = '../../../../../assets/tmp/xxx.xlsx';
+    }
+    a.href = this.downloadurl;
+    //  a.download=''
+    a.click();
+  }
+}
+
 
 
 
